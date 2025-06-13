@@ -1,0 +1,33 @@
+
+CREATE TABLE IF NOT EXISTS Users (
+    User_Id CHAR(255),
+    Name VARCHAR(255) NOT NULL,
+    Email VARCHAR(255) NOT NULL UNIQUE,
+    Password VARCHAR(255) NOT NULL,
+    User_Type VARCHAR(255) NOT NULL, 
+    Contact_No BIGINT NOT NULL,
+    Status VARCHAR(255) NOT NULL DEFAULT 'active',
+    PRIMARY KEY(User_Id)
+)
+
+-- Creating the Agent table
+CREATE TABLE IF NOT EXISTS Agent (
+    Licence_no BIGINT PRIMARY KEY,
+    User_Id VARCHAR(255) REFERENCES Users(User_Id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+
+-- Creating the Owner table
+CREATE TABLE IF NOT EXISTS Firms (
+    User_Id VARCHAR(255) PRIMARY KEY REFERENCES Users(User_Id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    Office_Name TEXT NOT NULL,
+    Office_Address TEXT NOT NULL UNIQUE
+);
+
+
+--Creating the Firm_Contact table
+CREATE TABLE IF NOT EXISTS Firm_Contact(
+User_Id VARCHAR(255) REFERENCES Firms(User_Id) ON UPDATE CASCADE ON DELETE CASCADE,
+Office_Contact BIGINT NOT NULL,
+PRIMARY KEY (User_Id,Office_Contact)
+);

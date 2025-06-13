@@ -1,0 +1,256 @@
+import { sql } from '../config/db.js';
+import crypto from 'crypto';
+
+const propertyController = {
+  // Get all amenities
+  getAmenities: async (req, res) => {
+    try {
+      const amenities = await sql`
+        SELECT Amenity_name FROM Amenities
+      `;
+      res.json(amenities.map(row => row.amenity_name));
+    } catch (error) {
+      console.error('Error fetching amenities:', error);
+      res.status(500).json({ message: 'Failed to fetch amenities' });
+    }
+  },
+
+  // Get properties by owner ID
+  getPropertiesByOwner: async (req, res) => {
+    try {
+      const { ownerId } = req.params;
+
+      const properties = await sql`
+        SELECT 
+          p.*,
+          COALESCE(r.Monthly_Rent, 0) as Monthly_Rent,
+          COALESCE(r.Security_Deposit, 0) as Security_Deposit,
+          COALESCE(s.Price, 0) as Price,
+          (
+            SELECT json_agg(json_build_object('url', pi.Image_Url, 'description', pi.Description))
+            FROM Property_Image pi
+            WHERE pi.Property_Id = p.APN
+          ) as Images,
+          (
+            SELECT json_agg(Amenity_name)
+            FROM Individual_amenities ia
+            WHERE ia.Property_Id = p.APN
+          ) as Individual_Amenities,
+          (
+            SELECT json_agg(Amenity_name)
+            FROM Shared_amenities sa
+            WHERE sa.Property_Id = p.APN
+          ) as Shared_Amenities
+        FROM Property p
+        LEFT JOIN Rent r ON p.APN = r.Property_Id
+        LEFT JOIN Sell s ON p.APN = s.Property_Id
+        WHERE p.Owner_id = ${ownerId}
+        ORDER BY p.APN DESC
+      `;
+
+      res.json(properties);
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+      res.status(500).json({ message: 'Failed to fetch properties' });
+    }
+  },
+
+  // Get all properties
+  getAllProperties: async (req, res) => {
+    try {
+      const properties = await sql`
+        SELECT 
+          p.*,
+          COALESCE(r.Monthly_Rent, 0) as Monthly_Rent,
+          COALESCE(r.Security_Deposit, 0) as Security_Deposit,
+          COALESCE(s.Price, 0) as Price,
+          (
+            SELECT json_agg(json_build_object('url', pi.Image_Url, 'description', pi.Description))
+            FROM Property_Image pi
+            WHERE pi.Property_Id = p.APN
+          ) as Images,
+          (
+            SELECT json_agg(Amenity_name)
+            FROM Individual_amenities ia
+            WHERE ia.Property_Id = p.APN
+          ) as Individual_Amenities,
+          (
+            SELECT json_agg(Amenity_name)
+            FROM Shared_amenities sa
+            WHERE sa.Property_Id = p.APN
+          ) as Shared_Amenities
+        FROM Property p
+        LEFT JOIN Rent r ON p.APN = r.Property_Id
+        LEFT JOIN Sell s ON p.APN = s.Property_Id
+        ORDER BY p.APN DESC
+      `;
+
+      res.json(properties);
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+      res.status(500).json({ message: 'Failed to fetch properties' });
+    }
+  },
+
+  // Generate unique APN
+  generateUniqueAPN: async () => {
+    // Generate a random 10-digit number
+    const randomNum = Math.floor(1000000000 + Math.random() * 9000000000);
+    
+    // Check if APN already exists
+    const existingProperty = await sql`
+      SELECT APN FROM Property WHERE APN = ${randomNum}
+    `;
+
+    if (existingProperty.length > 0) {
+      // If APN exists, recursively generate a new one
+      return propertyController.generateUniqueAPN();
+    }
+
+    return randomNum;
+  },
+
+  // Add new property
+  addProperty: async (req, res) => {
+    try {
+      // Validate owner ID first
+      const { ownerId } = req.body;
+      
+      if (!ownerId) {
+        return res.status(400).json({ 
+          message: 'Owner ID is required',
+          error: 'Missing owner ID'
+        });
+      }
+
+      // Check if owner exists
+      const ownerExists = await sql`
+        SELECT User_Id FROM Users WHERE User_Id = ${ownerId}
+      `;
+
+      if (ownerExists.length === 0) {
+        return res.status(400).json({ 
+          message: 'Invalid owner ID',
+          error: 'Owner does not exist'
+        });
+      }
+
+      await sql.query('BEGIN');
+
+      const {
+        builtYear,
+        status = 'Available',
+        mapUrl,
+        area,
+        state,
+        city,
+        district,
+        localAddress,
+        pincode,
+        neighborhoodInfo,
+        title,
+        availableFor,
+        type,
+        tourUrl,
+        // Individual and Shared amenities
+        individualAmenities = [],
+        sharedAmenities = [],
+
+        // Rent/Sell specific fields
+        monthlyRent,
+        securityDeposit,
+        price,
+
+        // Property Images
+        images = [], // Array of { url: string, description: string }
+      } = req.body;
+
+      // Generate unique APN
+      const apn = await propertyController.generateUniqueAPN();
+
+      // Insert property
+      const [property] = await sql`
+        INSERT INTO Property (
+          APN, Built_Year, Status, Map_Url, Area, State, City, District, 
+          Local_address, Pincode, Neighborhood_info, Title, 
+          Available_For, Type, Tour_URL, Owner_id
+        ) VALUES (
+          ${apn}, ${builtYear}, ${status}, ${mapUrl}, ${area}, ${state}, ${city}, ${district}, 
+          ${localAddress}, ${pincode}, ${neighborhoodInfo}, ${title}, 
+          ${availableFor}, ${type}, ${tourUrl}, ${ownerId}
+        ) RETURNING APN
+      `;
+
+      const propertyId = property.apn;
+
+      // Insert individual amenities
+      if (individualAmenities.length > 0) {
+        for (const amenity of individualAmenities) {
+          await sql`
+            INSERT INTO Individual_amenities (Property_Id, Amenity_name)
+            VALUES (${propertyId}, ${amenity})
+          `;
+        }
+      }
+
+      // Insert shared amenities
+      if (sharedAmenities.length > 0) {
+        for (const amenity of sharedAmenities) {
+          await sql`
+            INSERT INTO Shared_amenities (Property_Id, Amenity_name)
+            VALUES (${propertyId}, ${amenity})
+          `;
+        }
+      }
+
+      // Insert property images
+      if (images.length > 0) {
+        for (const image of images) {
+          await sql`
+            INSERT INTO Property_Image (Image_Url, Description, Property_Id)
+            VALUES (${image.url}, ${image.description}, ${propertyId})
+          `;
+        }
+      }
+
+      // Insert rent information if applicable
+      if (availableFor === 'Rent' || availableFor === 'Both') {
+        if (!monthlyRent || !securityDeposit) {
+          throw new Error('Monthly rent and security deposit are required for rental properties');
+        }
+        await sql`
+          INSERT INTO Rent (Property_Id, Owner_id, Monthly_Rent, Security_Deposit)
+          VALUES (${propertyId}, ${ownerId}, ${monthlyRent}, ${securityDeposit})
+        `;
+      }
+
+      // Insert sell information if applicable
+      if (availableFor === 'Sell' || availableFor === 'Both') {
+        if (!price) {
+          throw new Error('Price is required for properties for sale');
+        }
+        await sql`
+          INSERT INTO Sell (Property_Id, Owner_id, Price)
+          VALUES (${propertyId}, ${ownerId}, ${price})
+        `;
+      }
+
+      await sql.query('COMMIT');
+
+      res.status(201).json({ 
+        message: 'Property added successfully', 
+        propertyId,
+        apn
+      });
+    } catch (error) {
+      await sql.query('ROLLBACK');
+      console.error('Error adding property:', error);
+      res.status(500).json({ 
+        message: 'Failed to add property',
+        error: error.message 
+      });
+    }
+  }
+};
+
+export default propertyController; 
