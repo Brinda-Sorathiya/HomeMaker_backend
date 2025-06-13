@@ -40,14 +40,24 @@ const propertyController = {
             SELECT json_agg(Amenity_name)
             FROM Shared_amenities sa
             WHERE sa.Property_Id = p.APN
-          ) as Shared_Amenities
+          ) as Shared_Amenities,
+          (
+            SELECT json_agg(json_build_object(
+              'floorNo', f.Floor_No,
+              'hallNo', f.Hall_No,
+              'kitchenNo', f.Kitchen_No,
+              'bathNo', f.Bath_No,
+              'bedroomNo', f.Bedroom_No
+            ))
+            FROM facility f
+            WHERE f.Property_Id = p.APN
+          ) as Floors
         FROM Property p
         LEFT JOIN Rent r ON p.APN = r.Property_Id
         LEFT JOIN Sell s ON p.APN = s.Property_Id
         WHERE p.Owner_id = ${ownerId}
         ORDER BY p.APN DESC
       `;
-
       res.json(properties);
     } catch (error) {
       console.error('Error fetching properties:', error);
@@ -78,7 +88,18 @@ const propertyController = {
             SELECT json_agg(Amenity_name)
             FROM Shared_amenities sa
             WHERE sa.Property_Id = p.APN
-          ) as Shared_Amenities
+          ) as Shared_Amenities,
+          (
+            SELECT json_agg(json_build_object(
+              'floorNo', f.Floor_No,
+              'hallNo', f.Hall_No,
+              'kitchenNo', f.Kitchen_No,
+              'bathNo', f.Bath_No,
+              'bedroomNo', f.Bedroom_No
+            ))
+            FROM facility f
+            WHERE f.Property_Id = p.APN
+          ) as Floors
         FROM Property p
         LEFT JOIN Rent r ON p.APN = r.Property_Id
         LEFT JOIN Sell s ON p.APN = s.Property_Id
@@ -163,6 +184,9 @@ const propertyController = {
 
         // Property Images
         images = [], // Array of { url: string, description: string }
+
+        // Floor facility data
+        floors = [], // Array of floor facility data
       } = req.body;
 
       // Generate unique APN
@@ -182,6 +206,29 @@ const propertyController = {
       `;
 
       const propertyId = property.apn;
+
+      // Insert floor facility data
+      if (floors.length > 0) {
+        for (const floor of floors) {
+          await sql`
+            INSERT INTO facility (
+              Floor_No,
+              Hall_No,
+              Kitchen_No,
+              Bath_No,
+              Bedroom_No,
+              Property_Id
+            ) VALUES (
+              ${floor.floorNo},
+              ${floor.hallNo},
+              ${floor.kitchenNo},
+              ${floor.bathNo},
+              ${floor.bedroomNo},
+              ${propertyId}
+            )
+          `;
+        }
+      }
 
       // Insert individual amenities
       if (individualAmenities.length > 0) {

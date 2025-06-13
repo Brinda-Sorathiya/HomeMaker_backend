@@ -2,7 +2,7 @@ import { sql } from '../config/db.js';
 import { tableExists } from './tableUtils.js';
 
 // Tables required for property
-const PROPERTY_TABLES = ['amenities', 'property', 'property_image', 'rent', 'sell'];
+const PROPERTY_TABLES = ['amenities', 'property', 'property_image', 'rent', 'sell', 'facility'];
 
 // Function to create property tables if they don't exist
 async function createPropertyTableIfNotExists(tableName) {
@@ -77,6 +77,18 @@ async function createPropertyTableIfNotExists(tableName) {
                         );
                     `;
                     
+                    break;
+                case 'facility' : 
+                    await sql`
+                        CREATE TABLE facility(
+                            Floor_No BIGINT NOT NULL,
+                            Hall_No INT NOT NULL,
+                            Kitchen_No INT NOT NULL,
+                            Bath_No INT NOT NULL,
+                            Bedroom_No INT NOT NULL,
+                            Property_Id BIGINT REFERENCES Property(APN) ON UPDATE CASCADE ON DELETE RESTRICT,
+                            PRIMARY KEY(Property_Id,Floor_No)
+                        )`;
                     break;
                 case 'property_image':
                     await sql`
