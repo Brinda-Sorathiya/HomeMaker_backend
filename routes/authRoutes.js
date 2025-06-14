@@ -14,4 +14,7 @@ router.post('/login', checkAuthTables, authController.login);
 // Get user data route
 router.get('/me', authenticateToken, authController.getUserFromToken);
 
+// Update user profile route
+router.put('/update', authenticateToken, authController.updateUser);
+
 export default router; 
