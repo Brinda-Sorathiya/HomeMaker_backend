@@ -16,4 +16,7 @@ router.get('/properties', checkPropertyTables, propertyController.getAllProperti
 // Add new property
 router.post('/add', checkPropertyTables, propertyController.addProperty);
 
+// Update property
+router.put('/update/:apn', checkPropertyTables, propertyController.updateProperty);
+
 export default router; 

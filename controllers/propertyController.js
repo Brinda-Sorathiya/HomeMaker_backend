@@ -26,6 +26,9 @@ const propertyController = {
           COALESCE(r.Monthly_Rent, 0) as Monthly_Rent,
           COALESCE(r.Security_Deposit, 0) as Security_Deposit,
           COALESCE(s.Price, 0) as Price,
+          u.Email AS owner_email,
+          u.Contact_No AS owner_phone_number,
+          u.User_Id AS owner_id,
           (
             SELECT json_agg(json_build_object('url', pi.Image_Url, 'description', pi.Description))
             FROM Property_Image pi
@@ -55,6 +58,7 @@ const propertyController = {
         FROM Property p
         LEFT JOIN Rent r ON p.APN = r.Property_Id
         LEFT JOIN Sell s ON p.APN = s.Property_Id
+        LEFT JOIN Users u ON p.Owner_id = u.User_Id
         WHERE p.Owner_id = ${ownerId}
         ORDER BY p.APN DESC
       `;
@@ -74,6 +78,9 @@ const propertyController = {
           COALESCE(r.Monthly_Rent, 0) as Monthly_Rent,
           COALESCE(r.Security_Deposit, 0) as Security_Deposit,
           COALESCE(s.Price, 0) as Price,
+          u.Email AS owner_email,
+          u.Contact_No AS owner_phone_number,
+          u.User_Id AS owner_id,
           (
             SELECT json_agg(json_build_object('url', pi.Image_Url, 'description', pi.Description))
             FROM Property_Image pi
@@ -103,6 +110,7 @@ const propertyController = {
         FROM Property p
         LEFT JOIN Rent r ON p.APN = r.Property_Id
         LEFT JOIN Sell s ON p.APN = s.Property_Id
+        LEFT JOIN Users u ON p.Owner_id = u.User_Id
         ORDER BY p.APN DESC
       `;
 
@@ -295,6 +303,170 @@ const propertyController = {
       res.status(500).json({ 
         message: 'Failed to add property',
         error: error.message 
+      });
+    }
+  },
+
+  // Update property
+  updateProperty: async (req, res) => {
+    try {
+      const { apn } = req.params;
+      const {
+        built_year,
+        map_url,
+        area,
+        state,
+        city,
+        district,
+        local_address,
+        pincode,
+        neighborhood_info,
+        title,
+        available_for,
+        type,
+        tour_url,
+        individual_amenities = [],
+        shared_amenities = [],
+        monthly_rent,
+        security_deposit,
+        price,
+        images = [],
+        floors = [],
+      } = req.body;
+
+      await sql.query('BEGIN');
+
+      // 1. Update Property table
+      await sql`
+        UPDATE Property
+        SET
+          Built_Year = ${built_year},
+          Map_Url = ${map_url},
+          Area = ${area},
+          State = ${state},
+          City = ${city},
+          District = ${district},
+          Local_address = ${local_address},
+          Pincode = ${pincode},
+          Neighborhood_info = ${neighborhood_info},
+          Title = ${title},
+          Available_For = ${available_for},
+          Type = ${type},
+          Tour_URL = ${tour_url}
+        WHERE APN = ${apn}
+      `;
+
+      // 2. Handle Floors (delete existing, then insert new)
+      await sql`
+        DELETE FROM facility WHERE Property_Id = ${apn}
+      `;
+      if (floors.length > 0) {
+        for (const floor of floors) {
+          await sql`
+            INSERT INTO facility (
+              Floor_No,
+              Hall_No,
+              Kitchen_No,
+              Bath_No,
+              Bedroom_No,
+              Property_Id
+            ) VALUES (
+              ${floor.floorNo},
+              ${floor.hallNo},
+              ${floor.kitchenNo},
+              ${floor.bathNo},
+              ${floor.bedroomNo},
+              ${apn}
+            )
+          `;
+        }
+      }
+
+      // 3. Handle Individual Amenities (delete existing, then insert new)
+      await sql`
+        DELETE FROM Individual_amenities WHERE Property_Id = ${apn}
+      `;
+      if (individual_amenities.length > 0) {
+        for (const amenity of individual_amenities) {
+          await sql`
+            INSERT INTO Individual_amenities (Property_Id, Amenity_name)
+            VALUES (${apn}, ${amenity})
+          `;
+        }
+      }
+
+      // 4. Handle Shared Amenities (delete existing, then insert new)
+      await sql`
+        DELETE FROM Shared_amenities WHERE Property_Id = ${apn}
+      `;
+      if (shared_amenities.length > 0) {
+        for (const amenity of shared_amenities) {
+          await sql`
+            INSERT INTO Shared_amenities (Property_Id, Amenity_name)
+            VALUES (${apn}, ${amenity})
+          `;
+        }
+      }
+
+      // 5. Handle Property Images (delete existing, then insert new)
+      await sql`
+        DELETE FROM Property_Image WHERE Property_Id = ${apn}
+      `;
+      if (images.length > 0) {
+        for (const image of images) {
+          await sql`
+            INSERT INTO Property_Image (Image_Url, Description, Property_Id)
+            VALUES (${image.url}, ${image.description}, ${apn})
+          `;
+        }
+      }
+
+      // 6. Handle Rent/Sell information
+      if (available_for === 'Rent' || available_for === 'Both') {
+        if (!monthly_rent || !security_deposit) {
+          throw new Error('Monthly rent and security deposit are required for rental properties');
+        }
+        await sql`
+          INSERT INTO Rent (Property_Id, Monthly_Rent, Security_Deposit, Owner_id)
+          VALUES (${apn}, ${monthly_rent}, ${security_deposit}, (SELECT Owner_id FROM Property WHERE APN = ${apn}))
+          ON CONFLICT (Property_Id, Owner_id) DO UPDATE SET
+            Monthly_Rent = EXCLUDED.Monthly_Rent,
+            Security_Deposit = EXCLUDED.Security_Deposit
+        `;
+      } else {
+        // If not available for rent, delete existing rent entry
+        await sql`
+          DELETE FROM Rent WHERE Property_Id = ${apn}
+        `;
+      }
+
+      if (available_for === 'Sell' || available_for === 'Both') {
+        if (!price) {
+          throw new Error('Price is required for properties for sale');
+        }
+        await sql`
+          INSERT INTO Sell (Property_Id, Price, Owner_id)
+          VALUES (${apn}, ${price}, (SELECT Owner_id FROM Property WHERE APN = ${apn}))
+          ON CONFLICT (Property_Id, Owner_id) DO UPDATE SET
+            Price = EXCLUDED.Price
+        `;
+      } else {
+        // If not available for sell, delete existing sell entry
+        await sql`
+          DELETE FROM Sell WHERE Property_Id = ${apn}
+        `;
+      }
+
+      await sql.query('COMMIT');
+
+      res.status(200).json({ message: 'Property updated successfully', apn });
+
+    } catch (error) {
+      await sql.query('ROLLBACK');
+      console.error('Error updating property:', error);
+      res.status(500).json({
+        message: 'Failed to update property',
+        error: error.message
       });
     }
   }
