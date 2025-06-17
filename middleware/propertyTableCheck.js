@@ -2,7 +2,7 @@ import { sql } from '../config/db.js';
 import { tableExists } from './tableUtils.js';
 
 // Tables required for property
-const PROPERTY_TABLES = ['amenities', 'property', 'property_image', 'rent', 'sell', 'facility'];
+const PROPERTY_TABLES = ['amenities', 'property', 'property_image', 'rent', 'sell', 'facility', 'wishlist'];
 
 // Function to create property tables if they don't exist
 async function createPropertyTableIfNotExists(tableName) {
@@ -76,9 +76,9 @@ async function createPropertyTableIfNotExists(tableName) {
                             PRIMARY KEY(Property_Id,Amenity_name)
                         );
                     `;
-                    
+
                     break;
-                case 'facility' : 
+                case 'facility':
                     await sql`
                         CREATE TABLE facility(
                             Floor_No BIGINT NOT NULL,
@@ -113,7 +113,7 @@ async function createPropertyTableIfNotExists(tableName) {
                     break;
                 case 'sell':
                     await sql`
-                        CREATE TABLE IF NOT EXISTS Sell (
+                        CREATE TABLE Sell (
                             Property_Id BIGINT REFERENCES Property(APN) ON UPDATE CASCADE ON DELETE RESTRICT,
                             Owner_id CHAR(10) REFERENCES Users(User_Id) ON UPDATE CASCADE ON DELETE RESTRICT,
                             PRIMARY KEY(Property_Id,Owner_id),
@@ -121,6 +121,15 @@ async function createPropertyTableIfNotExists(tableName) {
                             Agent_lc_no BIGINT REFERENCES Agent(Licence_no) ON UPDATE CASCADE ON DELETE SET NULL
                         );
 
+                    `;
+                    break;
+                case 'wishlist':
+                    await sql`
+                        CREATE TABLE Wishlist (
+                        User_Id CHAR(10) REFERENCES Users(User_Id) ON UPDATE CASCADE ON DELETE RESTRICT,
+                        Property_Id BIGINT REFERENCES Property(APN) ON UPDATE CASCADE ON DELETE RESTRICT,
+                        PRIMARY KEY (User_Id, Property_Id)
+                    );
                     `;
                     break;
             }

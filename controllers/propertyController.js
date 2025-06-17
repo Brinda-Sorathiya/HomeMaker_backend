@@ -71,6 +71,7 @@ const propertyController = {
 
   // Get all properties
   getAllProperties: async (req, res) => {
+    const {userId} = req.params;
     try {
       const properties = await sql`
         SELECT 
@@ -81,6 +82,10 @@ const propertyController = {
           u.Email AS owner_email,
           u.Contact_No AS owner_phone_number,
           u.User_Id AS owner_id,
+          EXISTS (
+            SELECT 1 FROM Wishlist w 
+            WHERE w.Property_Id = p.APN AND w.User_Id = ${userId}
+          ) as is_wish,
           (
             SELECT json_agg(json_build_object('url', pi.Image_Url, 'description', pi.Description))
             FROM Property_Image pi
@@ -468,6 +473,108 @@ const propertyController = {
         message: 'Failed to update property',
         error: error.message
       });
+    }
+  },
+
+  // Add to wishlist
+  addToWishlist: async (req, res) => {
+    try {
+      const { propertyId, userId } = req.body;
+      
+      const property = await sql`
+        SELECT * FROM Property WHERE APN = ${propertyId}
+      `;
+
+      if (property.length === 0) {
+        return res.status(404).json({ message: 'Property not found' });
+      }
+
+      // Add to wishlist
+      await sql`
+        INSERT INTO Wishlist (User_Id, Property_Id)
+        VALUES (${uid}, ${propertyId})
+        ON CONFLICT (User_Id, Property_Id) DO NOTHING
+      `;
+
+      res.status(200).json({ message: 'Added to wishlist successfully' });
+    } catch (error) {
+      console.error('Error adding to wishlist:', error);
+      res.status(500).json({ message: 'Failed to add to wishlist' });
+    }
+  },
+
+  // Remove from wishlist
+  removeFromWishlist: async (req, res) => {
+    try {
+      const { propertyId, userId } = req.params;
+
+      const uid = userId.trim();
+      await sql`
+        DELETE FROM Wishlist 
+        WHERE user_Id = ${uid} AND property_Id = ${propertyId}
+      `;
+
+      res.status(200).json({ message: 'Removed from wishlist successfully' });
+    } catch (error) {
+      console.error('Error removing from wishlist:', error);
+      res.status(500).json({ message: 'Failed to remove from wishlist' });
+    }
+  },
+
+  // Get wishlist
+  getWishlist: async (req, res) => {
+    try {
+      const {userId} = req.params;
+      // console.log(userId)
+      const wishlist = await sql`
+        SELECT 
+          p.*,
+          COALESCE(r.Monthly_Rent, 0) as Monthly_Rent,
+          COALESCE(r.Security_Deposit, 0) as Security_Deposit,
+          COALESCE(s.Price, 0) as Price,
+          u.Email AS owner_email,
+          u.Contact_No AS owner_phone_number,
+          u.User_Id AS owner_id,
+          (
+            SELECT json_agg(json_build_object('url', pi.Image_Url, 'description', pi.Description))
+            FROM Property_Image pi
+            WHERE pi.Property_Id = p.APN
+          ) as Images,
+          (
+            SELECT json_agg(Amenity_name)
+            FROM Individual_amenities ia
+            WHERE ia.Property_Id = p.APN
+          ) as Individual_Amenities,
+          (
+            SELECT json_agg(Amenity_name)
+            FROM Shared_amenities sa
+            WHERE sa.Property_Id = p.APN
+          ) as Shared_Amenities,
+          (
+            SELECT json_agg(json_build_object(
+              'floorNo', f.Floor_No,
+              'hallNo', f.Hall_No,
+              'kitchenNo', f.Kitchen_No,
+              'bathNo', f.Bath_No,
+              'bedroomNo', f.Bedroom_No
+            ))
+            FROM facility f
+            WHERE f.Property_Id = p.APN
+          ) as Floors
+        FROM Wishlist w
+        JOIN Property p ON w.Property_Id = p.APN
+        LEFT JOIN Rent r ON p.APN = r.Property_Id
+        LEFT JOIN Sell s ON p.APN = s.Property_Id
+        LEFT JOIN Users u ON p.Owner_id = u.User_Id
+        WHERE w.User_Id = ${userId}
+        ORDER BY p.APN DESC
+      `;
+
+      // console.log('Wishlist query result:', wishlist);
+      res.json(wishlist);
+    } catch (error) {
+      console.error('Error fetching wishlist:', error);
+      res.status(500).json({ message: 'Failed to fetch wishlist' });
     }
   }
 };

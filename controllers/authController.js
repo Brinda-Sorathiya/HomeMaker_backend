@@ -154,7 +154,6 @@ const authController = {
   getUserFromToken: async (req, res) => {
     try {
       const userId = req.user.userId.trim();
-      console.log('Fetching data for userId:', userId);
 
       // Get basic user data
       const user = await sql`
@@ -168,7 +167,6 @@ const authController = {
       }
 
       const userData = user[0];
-      console.log('User type:', userData.user_type);
 
       let additionalData = {};
 
@@ -189,16 +187,13 @@ const authController = {
             WHERE user_id = ${userId}
           `;
           
-        console.log('Raw firm data:', firmData);
         const data = firmData[0];
-        console.log('Firm data:', data?.office_name);
 
         const firmContacts = await sql`
             SELECT office_contact
             FROM firm_contact 
             WHERE user_id = ${userId}
           `;
-        console.log('Raw firm contacts:', firmContacts);
 
         additionalData = {
           officeName: data?.office_name || null,
@@ -218,7 +213,6 @@ const authController = {
           ...additionalData
         }
       };
-      console.log('Sending response:', responseData);
 
       res.json(responseData);
     } catch (error) {
