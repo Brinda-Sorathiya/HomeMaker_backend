@@ -7,6 +7,7 @@ import { sql } from "./config/db.js";
 import authRoutes from './routes/authRoutes.js';
 import propertyRoutes from './routes/propertyRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js'
+import recomendRoutes from './routes/recommendationRoutes.js'
 import { app, server } from "./lib/socket.js";
 
 dotenv.config();
@@ -26,6 +27,7 @@ app.get("/", (req, res) => {
 app.use('/auth', authRoutes);
 app.use('/property', propertyRoutes);
 app.use('/review', reviewRoutes);
+app.use('/recommend', recomendRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
