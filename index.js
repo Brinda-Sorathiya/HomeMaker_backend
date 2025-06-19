@@ -6,10 +6,10 @@ import dotenv from "dotenv";
 import { sql } from "./config/db.js";
 import authRoutes from './routes/authRoutes.js';
 import propertyRoutes from './routes/propertyRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js'
+import { app, server } from "./lib/socket.js";
 
 dotenv.config();
-
-const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -25,6 +25,7 @@ app.get("/", (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/property', propertyRoutes);
+app.use('/review', reviewRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -40,7 +41,7 @@ const startServer = async () => {
         console.log("Connected to the database");
         
         // Start server
-        app.listen(PORT, () => {
+        server.listen(PORT, () => {
             console.log(`Server is running on port http://localhost:${PORT}`);
         });
     } catch (error) {
