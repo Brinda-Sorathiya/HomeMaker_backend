@@ -89,7 +89,27 @@ const authController = {
         // Send welcome email
         await mailService.sendWelcomeEmail(name, email);
 
-        res.status(201).json({ message: 'User registered successfully' });
+        // Create JWT token for the new user
+        const token = jwt.sign(
+          { userId: userId, userType: userType },
+          process.env.JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+
+        // Prepare user object for response
+        const userObj = {
+          id: userId,
+          name,
+          email,
+          userType,
+          contactNo
+        };
+
+        res.status(201).json({
+          message: 'User registered successfully',
+          token,
+          user: userObj
+        });
       } catch (error) {
         // Rollback transaction on error
         await sql`ROLLBACK`;
