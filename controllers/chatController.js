@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Adjust this URL to your Python backend endpoint
-const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://localhost:8000/ai/chat';
+const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL;
 
 export const ask = async (req, res) => {
   const { message } = req.body;
